@@ -24,6 +24,8 @@ What it does:
 - Runs `npm install` when `package.json` exists.
 - Installs Playwright Chromium when Playwright is detected in `package.json`.
 - Installs the plugin into OpenClaw using a live link.
+- Adds the plugin id from `openclaw.plugin.json` to `plugins.allow` without
+  removing any existing trusted ids.
 
 The local directory always matches the repo name. For example:
 
@@ -76,6 +78,8 @@ What it does:
 - Enters the local plugin directory.
 - Runs `git pull --ff-only` if the directory is a git repo.
 - Runs `npm install` when `package.json` exists.
+- Adds the plugin id from `openclaw.plugin.json` to `plugins.allow` without
+  removing any existing trusted ids.
 - Restarts the OpenClaw gateway so it loads the latest code.
 
 If the plugin id, manifest, or install metadata changed, use `-d`:
@@ -148,6 +152,7 @@ The VM should have:
 - `bash`
 - `git`
 - `npm`
+- `node`
 - `openclaw`
 - `npx`, if using Playwright-based plugins
 - `sudo`, optional, for Playwright system dependency installation
