@@ -1,177 +1,51 @@
 # VM Plugin Installer Scripts
 
-Small helper scripts for managing OpenClaw plugins on a GCP VM.
+**The "git push → live on the VM in one command" loop for OpenClaw plugins.** Two small shell scripts that keep GitHub-hosted plugins installed and up to date on a remote agent box, so iterating on a plugin doesn't mean re-doing install plumbing every time.
 
-These scripts are meant for plugins that live in GitHub repos and are loaded
-into OpenClaw through the `openclaw` CLI.
+```bash
+./getplugin.sh owner/repo      # first install, or update + reinstall
+./reinstall.sh repo-name       # fast: pull latest + npm install while iterating
+```
 
-## Scripts
+---
 
-### `getplugin.sh`
+## Why this exists
 
-Use this for the first install of a plugin repo, or to update and reinstall a
-plugin that already exists locally.
+I develop OpenClaw plugins locally and run them on a GCP VM (provisioned by [OpenClaw-VM-Script](https://github.com/krishnakem/OpenClaw-VM-Script)). The inner loop — push a change, get it onto the box, reinstall into OpenClaw, restart the gateway — is exactly the kind of friction that quietly kills iteration speed. These two scripts collapse it to one command each.
+
+## `getplugin.sh` — install or update a plugin from GitHub
 
 ```bash
 ./getplugin.sh owner/repo
 ```
 
-What it does:
+- Clones `https://github.com/owner/repo.git` if it isn't on the VM yet; otherwise `git pull --ff-only`
+- Uses the **repo name as the local directory name** (custom targets are rejected on purpose, so the plugin dir always matches the repo)
+- Runs `npm install` when `package.json` exists
+- Installs Playwright Chromium automatically when Playwright is detected
+- Installs the plugin into OpenClaw with a live link
+- Adds the plugin id from `openclaw.plugin.json` to `plugins.allow` **without** clobbering existing trusted ids
 
-- Clones `https://github.com/owner/repo.git` if the plugin is not already on the VM.
-- If the plugin already exists, runs `git pull --ff-only`.
-- Uses the repo name as the local plugin directory name.
-- Runs `npm install` when `package.json` exists.
-- Installs Playwright Chromium when Playwright is detected in `package.json`.
-- Installs the plugin into OpenClaw using a live link.
-- Adds the plugin id from `openclaw.plugin.json` to `plugins.allow` without
-  removing any existing trusted ids.
+Flags:
 
-The local directory always matches the repo name. For example:
+| Flag | Effect |
+| --- | --- |
+| `-r` | Restart the OpenClaw gateway after installing |
+| `-n` | Clone/update + dependency setup only; skip the OpenClaw install step |
+| `-nr` | Combine the above |
 
-```bash
-./getplugin.sh my-org/calendar-agent
-```
-
-creates or updates:
-
-```bash
-./calendar-agent
-```
-
-Custom target directories are intentionally rejected so the plugin name stays
-aligned with the repo name.
-
-Useful flags:
-
-```bash
-./getplugin.sh -r owner/repo
-```
-
-Install the plugin and restart the OpenClaw gateway afterward.
-
-```bash
-./getplugin.sh -n owner/repo
-```
-
-Clone/update the repo and run dependency setup, but skip the OpenClaw install
-step.
-
-Flags can be combined:
-
-```bash
-./getplugin.sh -nr owner/repo
-```
-
-### `reinstall.sh`
-
-Use this while rapidly iterating on a plugin.
-
-After pushing changes to GitHub, run this on the VM:
+## `reinstall.sh` — the fast iteration path
 
 ```bash
 ./reinstall.sh repo-name
 ```
 
-What it does:
+For when you're rapidly iterating and just need the box to catch up to GitHub: enters the local plugin dir, `git pull --ff-only`, and `npm install` if there's a `package.json`. No re-clone, no OpenClaw round-trip.
 
-- Enters the local plugin directory.
-- Runs `git pull --ff-only` if the directory is a git repo.
-- Runs `npm install` when `package.json` exists.
-- Adds the plugin id from `openclaw.plugin.json` to `plugins.allow` without
-  removing any existing trusted ids.
-- Restarts the OpenClaw gateway so it loads the latest code.
+## Where these live
 
-If the plugin id, manifest, or install metadata changed, use `-d`:
+These scripts are staged onto the VM automatically by the [OpenClaw VM provisioner](https://github.com/krishnakem/OpenClaw-VM-Script), so a freshly provisioned box already has them in the home folder — ready to pull in whichever agent you want to test.
 
-```bash
-./reinstall.sh -d repo-name
-```
+## License
 
-That also re-runs:
-
-```bash
-openclaw plugins install "$(pwd)" --link --dangerously-force-unsafe-install
-```
-
-before restarting the gateway.
-
-With no directory, `reinstall.sh` only restarts the gateway:
-
-```bash
-./reinstall.sh
-```
-
-## Typical VM Workflow
-
-First install:
-
-```bash
-./getplugin.sh -r owner/my-plugin
-```
-
-Later, after pushing new plugin changes to GitHub:
-
-```bash
-./reinstall.sh my-plugin
-```
-
-If the plugin manifest or id changed:
-
-```bash
-./reinstall.sh -d my-plugin
-```
-
-## Configuration
-
-Environment variables:
-
-| Variable | Used by | Default | Purpose |
-| --- | --- | --- | --- |
-| `PLUGIN_DIR` | `getplugin.sh` | current directory | Base directory where plugin repos are cloned |
-| `GIT_HOST` | `getplugin.sh` | `github.com` | Git host used to build clone URLs |
-| `NO_OPENCLAW` | `getplugin.sh` | unset | Set to `1` to skip OpenClaw install, same as `-n` |
-| `GATEWAY_LOG` | both | `~/.openclaw/gateway.log` | Log file for restarted gateway process |
-
-Example:
-
-```bash
-PLUGIN_DIR=~/plugins ./getplugin.sh -r owner/my-plugin
-```
-
-This clones or updates the plugin at:
-
-```bash
-~/plugins/my-plugin
-```
-
-## Requirements
-
-The VM should have:
-
-- `bash`
-- `git`
-- `npm`
-- `node`
-- `openclaw`
-- `npx`, if using Playwright-based plugins
-- `sudo`, optional, for Playwright system dependency installation
-
-## Notes
-
-Both scripts use `git pull --ff-only`. If the VM has local commits or divergent
-changes, the pull will fail instead of overwriting work.
-
-The gateway restart logic stops any process matching:
-
-```bash
-openclaw gateway run
-```
-
-and relaunches it in the background with logs written to `GATEWAY_LOG`.
-
-Follow gateway logs with:
-
-```bash
-tail -f ~/.openclaw/gateway.log
-```
+See repository.
